@@ -77,7 +77,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.25.0
     volumes:
-      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_config:/etc/alertmanager
       - ./config/alertmanager/templates:/etc/alertmanager/templates
     ports:
       - "9093:9093"
@@ -86,6 +86,26 @@ services:
       - '--storage.path=/alertmanager'
       - '--log.level=debug'
     env_file: .env
+    networks:
+      - monitoring-network
+    depends_on:
+      alertmanager-config:
+        condition: service_completed_successfully
+
+  alertmanager-config:
+    image: busybox:1.36
+    volumes:
+      - ./config/alertmanager.yml.template:/template/alertmanager.yml.template
+      - alertmanager_config:/etc/alertmanager
+    env_file: .env
+    command: >
+      sh -c "cp /template/alertmanager.yml.template /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_SMTP_SMARTHOST}|$${ALERTMANAGER_SMTP_SMARTHOST}|g\" /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_SMTP_FROM}|$${ALERTMANAGER_SMTP_FROM}|g\" /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_SMTP_AUTH_USERNAME}|$${ALERTMANAGER_SMTP_AUTH_USERNAME}|g\" /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_SMTP_AUTH_PASSWORD}|$${ALERTMANAGER_SMTP_AUTH_PASSWORD}|g\" /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_SMTP_REQUIRE_TLS}|$${ALERTMANAGER_SMTP_REQUIRE_TLS}|g\" /etc/alertmanager/alertmanager.yml &&
+             sed -i \"s|\\\$${ALERTMANAGER_EMAIL_TO}|$${ALERTMANAGER_EMAIL_TO}|g\" /etc/alertmanager/alertmanager.yml"
     networks:
       - monitoring-network
 
@@ -181,3 +201,4 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  alertmanager_config:
