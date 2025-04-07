@@ -1,0 +1,13 @@
+# Common Dockerignore patterns
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.swp
+*~
+logs/
+*.log
+/config
+/venv
+/tmp

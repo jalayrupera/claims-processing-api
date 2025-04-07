@@ -1,0 +1,151 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black
+          pip install -r requirements.txt
+      - name: Lint with flake8
+        run: |
+          flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Check formatting with black
+        run: |
+          black --check app
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      loki:
+        image: grafana/loki:2.9.0
+        ports:
+          - 3100:3100
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+      - name: Run tests
+        env:
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME || 'Claim Processing API' }}
+          API_V1_STR: ${{ secrets.API_V1_STR || '/api/v1' }}
+          SECRET_KEY: ${{ secrets.TEST_SECRET_KEY || 'testsecretkey' }}
+          ALGORITHM: ${{ secrets.ALGORITHM || 'HS256' }}
+          ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES || '30' }}
+          REFRESH_TOKEN_EXPIRE_DAYS: ${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS || '7' }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST || 'localhost' }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT || '5432' }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB || 'test_db' }}
+          LOKI_HOST: ${{ secrets.LOKI_HOST || 'localhost' }}
+          LOKI_PORT: ${{ secrets.LOKI_PORT || '3100' }}
+          BACKEND_CORS_ORIGINS: ${{ secrets.BACKEND_CORS_ORIGINS || '["*"]' }}
+        run: |
+          echo "No tests found. This step is currently placeholding for future tests."
+          # When tests are added, uncomment this line:
+          # pytest --cov=app --cov-report=xml
+          # Create an empty coverage report for now
+          echo '<?xml version="1.0" ?><coverage version="1.0"></coverage>' > coverage.xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/claim-processing-api:latest
+          build-args: |
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}
+            POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to staging
+        env:
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME || 'Claim Processing API' }}
+          API_V1_STR: ${{ secrets.API_V1_STR || '/api/v1' }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ALGORITHM: ${{ secrets.ALGORITHM || 'HS256' }}
+          ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES || '30' }}
+          REFRESH_TOKEN_EXPIRE_DAYS: ${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS || '7' }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          LOKI_HOST: ${{ secrets.LOKI_HOST }}
+          LOKI_PORT: ${{ secrets.LOKI_PORT }}
+          BACKEND_CORS_ORIGINS: ${{ secrets.BACKEND_CORS_ORIGINS || '["*"]' }}
+          GF_SECURITY_ADMIN_USER: ${{ secrets.GF_SECURITY_ADMIN_USER }}
+          GF_SECURITY_ADMIN_PASSWORD: ${{ secrets.GF_SECURITY_ADMIN_PASSWORD }}
+          GF_USERS_ALLOW_SIGN_UP: ${{ secrets.GF_USERS_ALLOW_SIGN_UP || 'false' }}
+        run: |
+          echo "Deploying to staging environment"
+          # Here you would typically:
+          # 1. Connect to your staging server (e.g., AWS ECS, Kubernetes)
+          # 2. Pass the environment variables to your deployment
+          # 3. Update the deployment with the new image
+          # 4. Run any necessary database migrations
+          # 5. Verify the deployment was successful

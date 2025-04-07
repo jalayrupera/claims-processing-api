@@ -1,0 +1,164 @@
+groups:
+- name: api_alerts
+  rules:
+  - alert: HighErrorRate
+    expr: sum(rate(http_requests_total{status_code=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "High Error Rate Detected"
+      description: "Error rate is above 5% for the last 5 minutes"
+      value: "{{ $value }}"
+
+  - alert: High5xxErrors
+    expr: rate(log_messages_total{job="api",level="error"}[2m]) > 5
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: "High 5xx Error Rate Detected"
+      description: "High server error rate detected in the last 2 minutes"
+      value: "{{ $value }} errors/sec"
+
+  - alert: High4xxErrors
+    expr: rate(log_messages_total{job="api",level="warning"}[5m]) > 10
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Client Error Rate"
+      description: "High client error (4xx) rate detected in the last 5 minutes"
+      value: "{{ $value }} errors/sec"
+
+  - alert: SpecificRouteFailure
+    expr: sum(rate(http_requests_total{status_code=~"5..", path=~"/api/claims.*"}[5m])) > 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Claims API Route Failing"
+      description: "The claims API route is returning 5xx errors"
+      value: "{{ $value }} errors per second"
+
+  - alert: HighLatency
+    expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API Latency"
+      description: "95th percentile of request duration is above 1 second for the last 5 minutes"
+      value: "{{ $value }} seconds"
+
+  - alert: APIDown
+    expr: up{job="api"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "API Service Down"
+      description: "The API service has been down for more than 1 minute"
+
+  - alert: HighClaimRejectionRate
+    expr: sum(rate(claim_processing_total{status="rejected"}[15m])) / sum(rate(claim_processing_total[15m])) > 0.2
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Claim Rejection Rate"
+      description: "More than 20% of claims are being rejected in the last 15 minutes"
+      value: "{{ $value }}"
+
+  - alert: LowClaimProcessingRate
+    expr: sum(rate(claim_processing_total[15m])) < 1
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Low Claim Processing Rate"
+      description: "Less than 1 claim per minute is being processed in the last 15 minutes"
+      value: "{{ $value }}"
+
+- name: system_alerts
+  rules:
+  - alert: HighCPUUsage
+    expr: avg(rate(process_cpu_seconds_total{job="api"}[5m])) * 100 > 80
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU Usage"
+      description: "API service is using more than 80% CPU for the last 5 minutes"
+      value: "{{ $value }}%"
+
+  - alert: HighMemoryUsage
+    expr: process_resident_memory_bytes{job="api"} / (1024 * 1024 * 1024) > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Memory Usage"
+      description: "API service is using more than 1GB of memory for the last 5 minutes"
+      value: "{{ $value }}GB"
+
+  - alert: DatabaseConnectionFailures
+    expr: increase(sqlalchemy_connection_errors_total[5m]) > 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Database Connection Failures"
+      description: "There have been database connection failures in the last 5 minutes"
+      value: "{{ $value }} failures"
+
+  - alert: DatabaseDown
+    expr: up{job="db"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Database Service Down"
+      description: "The database service has been down for more than 1 minute"
+
+  - alert: DatabaseHighLatency
+    expr: histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le)) > 1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High Database Latency"
+      description: "95th percentile of query duration is above 1 second for the last 5 minutes"
+      value: "{{ $value }} seconds"
+
+- name: test_alerts
+  rules:
+  - alert: EmailConfigTest
+    expr: vector(1)
+    for: 10s
+    labels:
+      severity: critical
+    annotations:
+      summary: "Test Email Alert - Manual Trigger"
+      description: "This is a test alert with updated SMTP configuration."
+      value: "Test Value Updated Again"
+      
+  - alert: EmailConfigTest2
+    expr: vector(1)
+    for: 5s
+    labels:
+      severity: critical
+    annotations:
+      summary: "New Test Email Alert"
+      description: "This is a brand new test alert to force another email notification."
+      value: "New Test Value"
+      
+  - alert: SimplifiedEmailTest
+    expr: vector(1)
+    for: 5s
+    labels:
+      severity: critical
+    annotations:
+      summary: "Simplified Email Configuration Test"
+      description: "Testing with simplified email configuration."
+      timestamp: "Current time"
