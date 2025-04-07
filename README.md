@@ -225,6 +225,21 @@ Alerts are configured in `config/alert_rules.yml` and include:
 5. **Database Connection Failures**: Monitors database connectivity
 6. **High CPU/Memory Usage**: Monitors resource constraints
 
+The AlertManager configuration uses a template-based approach with environment variables:
+
+1. SMTP and email settings are defined in the `.env` file
+2. A template file `config/alertmanager.yml.template` contains placeholders
+3. Environment variables are securely substituted at runtime
+4. The generated configuration is stored in a Docker volume, not exposed on the host filesystem
+
+Required environment variables for AlertManager:
+- `ALERTMANAGER_SMTP_SMARTHOST`: SMTP server address and port (e.g., "smtp.example.com:587")  
+- `ALERTMANAGER_SMTP_FROM`: Sender email address
+- `ALERTMANAGER_SMTP_AUTH_USERNAME`: SMTP username
+- `ALERTMANAGER_SMTP_AUTH_PASSWORD`: SMTP password or token
+- `ALERTMANAGER_SMTP_REQUIRE_TLS`: Whether to use TLS (true/false)
+- `ALERTMANAGER_EMAIL_TO`: Recipient email address
+
 ### Testing the Monitoring System
 
 We provide scripts to test the monitoring and alerting system:
